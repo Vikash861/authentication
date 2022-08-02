@@ -8,7 +8,7 @@ const app = express();
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
-
+var md5 = require('md5');
 /////////////////////////////////////////////DATABASE////////////////////////////////////////////////
 mongoose.connect("mongodb://localhost:27017/usersDB")
 // to use encryption we have to define schema using class object///////
@@ -17,7 +17,7 @@ const userSchema = new mongoose.Schema({
     password: String
 })
 
-userSchema.plugin(encrypt,{secret:process.env.SECRET,encryptedFields: ['password']});
+// userSchema.plugin(encrypt,{secret:process.env.SECRET,encryptedFields: ['password']});
 
 const user = mongoose.model('users', userSchema);
 
@@ -38,6 +38,8 @@ app.get('/register', (req, res) => {
 
 ////////////////////////////////////////////////////POST///////////////////////////////////////////
 
+
+
 app.post('/register', (req, res) => {
 
 
@@ -46,7 +48,7 @@ app.post('/register', (req, res) => {
             if (foundUser == null) {
                 const userRegDetails = new user({
                     email: req.body.username,
-                    password: req.body.password
+                    password: md5(req.body.password)
                 })
                 userRegDetails.save((err) => {
                     if (err) return handleError(err)
@@ -68,7 +70,7 @@ app.post('/login', (req, res) => {
     user.findOne({ email: req.body.username })
         .then((foundUser) => {
             if(foundUser != null){
-                if(req.body.password == foundUser.password){
+                if(md5(req.body.password) == foundUser.password){
                     res.render('secrets');
                 }
                 else{
