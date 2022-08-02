@@ -3,12 +3,15 @@ require('dotenv').config()
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const encrypt = require('mongoose-encryption');
+const encrypt = require('mongoose-encryption');//for simple ceaser method encryption
+var md5 = require('md5');// hasing enryption
+const bcrypt = require('bcrypt');//salting and hashing
+const saltRounds = 2;
+
 const app = express();
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
-var md5 = require('md5');
 /////////////////////////////////////////////DATABASE////////////////////////////////////////////////
 mongoose.connect("mongodb://localhost:27017/usersDB")
 // to use encryption we have to define schema using class object///////
@@ -45,20 +48,22 @@ app.post('/register', (req, res) => {
 
     user.findOne({ email: req.body.username })
         .then((foundUser) => {
-            if (foundUser == null) {
-                const userRegDetails = new user({
-                    email: req.body.username,
-                    password: md5(req.body.password)
-                })
-                userRegDetails.save((err) => {
-                    if (err) return handleError(err)
-                    else
-                        res.render('secrets');
-                })
-            }
-            else {
-                res.render('secrets')
-            }
+            bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+                if (foundUser == null) {
+                    const userRegDetails = new user({
+                        email: req.body.username,
+                        password: hash
+                    })
+                    userRegDetails.save((err) => {
+                        if (err) return handleError(err)
+                        else
+                            res.render('secrets');
+                    })
+                }
+                else {
+                    res.render('secrets')
+                }
+            });
         })
         .catch(err => console.log(err));
 
@@ -70,12 +75,14 @@ app.post('/login', (req, res) => {
     user.findOne({ email: req.body.username })
         .then((foundUser) => {
             if(foundUser != null){
-                if(md5(req.body.password) == foundUser.password){
-                    res.render('secrets');
-                }
-                else{
-                    res.render("wrong password");
-                }
+                bcrypt.compare(req.body.password, foundUser.password, function(err, result) {
+                    if(result === true){
+                        res.render('secrets');
+                    }
+                    else{
+                        res.render("wrong password");
+                    }
+                });
             }
             else
                 res.render("Accound doesn't exist please create accound");
