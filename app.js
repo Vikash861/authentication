@@ -4,23 +4,42 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');//salting and hashing
-const saltRounds = 2;
-const cookieParser = require('cookie-parser');
-const sessions = require('express-session');
+const saltRounds = 1;
 const session = require('express-session');
+var MongoDBStore = require('connect-mongodb-session')(session);
 
 const app = express();
+var store = new MongoDBStore({
+    uri: 'mongodb://localhost:27017/usersessions',
+    collection: 'mySessions'
+});
+
+//  Catch errors
+store.on('error', function (error) {
+    console.log(error);
+});
+
+
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
-app.use(cookieParser());
-const oneDay = 1000 * 60 * 60 * 24;
-app.use(sessions({
+app.use(session({
+    // key:user_SID,
     secret: process.env.SESSION_SECRET,
+    store: store,
+    resave: false,
     saveUninitialized: true,
-    cookie: { maxAge: oneDay },
-    resave: false
-}));
+    cookie: { secure: false, expires: 1000 * 60 * 60 }
+}))
+
+const sessionChecker = (req, res, next) => {
+    if (req.session.userid) {
+        res.render('secrets');
+    }
+    else {
+        next();
+    }
+}
 
 /////////////////////////////////////////////DATABASE////////////////////////////////////////////////
 mongoose.connect("mongodb://localhost:27017/usersDB")
@@ -30,43 +49,21 @@ const userSchema = new mongoose.Schema({
     password: String
 })
 
-// userSchema.plugin(encrypt,{secret:process.env.SECRET,encryptedFields: ['password']});
-
 const user = mongoose.model('users', userSchema);
 
 ////////////////////////////////////////////GET/////////////////////////////////////////////////
 
 ////////////////////////////////////Home/////////////////////////////////////////////////////
-app.get('/', (req, res) => {
-    const session = req.session;
-    console.log(session.userid);
-    if (session.userid) {
-        res.render('secrets')
-    }
-    else
-        res.render('home');
+app.get('/', sessionChecker, (req, res) => {
+    res.render('home');
 })
 //////////////////////////////////////////Login////////////////////////////////////////////////////
-app.get('/login', (req, res) => {
-    const session = req.session;
-    console.log(session.userid);
-    if (session.userid) {
-        res.render('secrets')
-    }
-    else{
-        res.render('login');
-    }
+app.get('/login', sessionChecker, (req, res) => {
+    res.render('login');
 })
 //////////////////////////////////////////Register////////////////////////////////////////
-app.get('/register', (req, res) => {
-    const session = req.session;
-    console.log(session.userid);
-    if (session.userid) {
-        res.render('secrets')
-    }
-    else{
-        res.render('register');
-    }
+app.get('/register', sessionChecker, (req, res) => {
+    res.render('register');
 })
 
 app.get('/logout', (req, res) => {
@@ -84,28 +81,22 @@ app.post('/register', (req, res) => {
             email: req.body.username,
             password: hash
         })
-
-
-        userRegDetails.save((err) => {
-            if (err) return handleError(err)
-            else {
-                const session = req.session;
-                session.userid = req.body.username;
-                res.render('secrets');
-            }
+        userRegDetails.save().then(()=>{
+            req.session.userid = req.body.username;
+            res.render('secrets');
         })
+
     });
+
 })
 
 app.post('/login', (req, res) => {
-
     user.findOne({ email: req.body.username })
         .then((foundUser) => {
             if (foundUser != null) {
                 bcrypt.compare(req.body.password, foundUser.password, function (err, result) {
                     if (result === true) {
-                        const session = req.session;
-                        session.userid = req.body.username;
+                        req.session.userid = req.body.username;
                         res.render('secrets');
                     }
                     else {
@@ -117,7 +108,6 @@ app.post('/login', (req, res) => {
                 res.render("Accound doesn't exist please create accound");
         })
         .catch(err => console.log(err));
-
 })
 
 
